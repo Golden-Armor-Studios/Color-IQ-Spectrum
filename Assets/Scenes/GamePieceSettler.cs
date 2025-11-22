@@ -23,7 +23,8 @@ public class GamePieceSettler : MonoBehaviour
             return;
         }
 
-        bool hasSupport = Physics2D.Raycast(rigidBody.position, Vector2.down, SupportCheckDistance, supportMask);
+        RaycastHit2D supportHit = Physics2D.Raycast(rigidBody.position, Vector2.down, SupportCheckDistance, supportMask);
+        bool hasSupport = supportHit.collider != null;
 
         if (!hasSupport)
         {
@@ -41,7 +42,8 @@ public class GamePieceSettler : MonoBehaviour
             return;
         }
 
-        if (Mathf.Abs(rigidBody.linearVelocity.y) <= SettleVelocityThreshold)
+        float verticalSpeed = Mathf.Abs(rigidBody.linearVelocity.y);
+        if (verticalSpeed <= SettleVelocityThreshold)
         {
             rigidBody.linearVelocity = Vector2.zero;
             rigidBody.angularVelocity = 0f;

@@ -5,7 +5,7 @@ public static class IOSShare
 {
 #if UNITY_IOS && !UNITY_EDITOR
     [DllImport("__Internal")]
-    private static extern void iosShare_sheet(const string imagePath, const string message);
+    private static extern void iosShare_sheet(string imagePath, string message);
 #endif
 
     public static void ShareImage(string imagePath, string message)
