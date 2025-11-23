@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Firebase;
 using Firebase.Auth;
 using UnityEngine;
+using FB;
 
 #if UNITY_IOS || UNITY_EDITOR_OSX
 using Apple.GameKit;
