@@ -64,21 +64,19 @@ public static class LevelPlayDefineUtility
         {
             return false;
         }
-#if UNITY_2022_1_OR_NEWER
-        return BuildPipeline.IsBuildTargetGroupSupported(group);
-#else
         switch (group)
         {
             case BuildTargetGroup.Standalone:
             case BuildTargetGroup.iOS:
             case BuildTargetGroup.Android:
             case BuildTargetGroup.tvOS:
+            case BuildTargetGroup.WSA:
+            case BuildTargetGroup.macOS:
             case BuildTargetGroup.Switch:
                 return true;
             default:
                 return false;
         }
-#endif
     }
 }
 #endif
