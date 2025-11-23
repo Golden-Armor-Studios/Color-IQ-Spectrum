@@ -97,7 +97,7 @@ public class GameController : MonoBehaviour
         if (InAppPurchaseManager.Instance != null) {
             InAppPurchaseManager.Instance.OnAdsRemoved -= UpdateRemoveAdsButton;
         }
-#if (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
+#if LEVELPLAY_SDK && (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
         IronSourceEvents.onRewardedVideoAvailabilityChangedEvent -= OnRewardedVideoAvailabilityChanged;
         IronSourceEvents.onRewardedVideoAdShowFailedEvent -= OnRewardedVideoShowFailed;
         IronSourceEvents.onRewardedVideoAdClosedEvent -= OnRewardedVideoClosed;
@@ -294,14 +294,18 @@ public class GameController : MonoBehaviour
 #if UNITY_EDITOR
         return simulateRewardedAdsInEditor;
 #elif UNITY_IOS || UNITY_ANDROID
+#if LEVELPLAY_SDK
         return rewardedAvailable;
+#else
+        return false;
+#endif
 #else
         return false;
 #endif
     }
 
     void InitializeLevelPlayAds() {
-#if (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
+#if LEVELPLAY_SDK && (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
         if (string.IsNullOrEmpty(ironSourceAppKey)) {
             Debug.LogWarning("[Ads] IronSource app key missing. Rewarded ads disabled.");
             return;
@@ -316,7 +320,7 @@ public class GameController : MonoBehaviour
     }
 
     void RegisterLevelPlayEvents() {
-#if (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
+#if LEVELPLAY_SDK && (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
         IronSourceEvents.onRewardedVideoAvailabilityChangedEvent += OnRewardedVideoAvailabilityChanged;
         IronSourceEvents.onRewardedVideoAdShowFailedEvent += OnRewardedVideoShowFailed;
         IronSourceEvents.onRewardedVideoAdClosedEvent += OnRewardedVideoClosed;
@@ -342,6 +346,7 @@ public class GameController : MonoBehaviour
     }
 
     void ShowRewardedAdInternal() {
+#if LEVELPLAY_SDK
 #if UNITY_EDITOR
         if (simulateRewardedAdsInEditor) {
             Debug.Log("[Ads] Simulating rewarded ad in editor.");
@@ -366,6 +371,14 @@ public class GameController : MonoBehaviour
 #else
         CompleteRewardSequence();
 #endif
+#else
+        if (simulateRewardedAdsInEditor) {
+            Debug.Log("[Ads] Simulating rewarded ad without LevelPlay SDK.");
+            StartCoroutine(SimulateEditorRewardedAd());
+        } else {
+            CompleteRewardSequence();
+        }
+#endif
     }
 
     IEnumerator SimulateEditorRewardedAd() {
@@ -381,7 +394,7 @@ public class GameController : MonoBehaviour
         callback?.Invoke();
     }
 
-#if (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
+#if LEVELPLAY_SDK && (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
     void OnRewardedVideoAvailabilityChanged(bool available) {
         rewardedAvailable = available;
         Debug.Log($"[Ads] Rewarded availability changed: {available}");
