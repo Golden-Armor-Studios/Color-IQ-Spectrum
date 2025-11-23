@@ -10,6 +10,8 @@
 	<string>732128551566</string>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:732128551566:ios:5f2201d4c4a9e3e04a9fdf</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.goldenarmorstudio.coloriqspectrum</string>
 	<key>IS_ADS_ENABLED</key>
 	<false/>
 	<key>IS_ANALYTICS_ENABLED</key>
