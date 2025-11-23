@@ -37,6 +37,12 @@ public static class BuildPostprocessor
             project.SetBuildProperty(frameworkTarget, key, value);
         }
 
+        string projectGuid = project.ProjectGuid();
+        if (!string.IsNullOrEmpty(projectGuid))
+        {
+            project.SetBuildProperty(projectGuid, key, value);
+        }
+
         project.WriteToFile(projectPath);
     }
 }
