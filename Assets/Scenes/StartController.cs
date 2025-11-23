@@ -21,7 +21,7 @@ public class StartController : MonoBehaviour
     {
 #if UNITY_IOS || UNITY_EDITOR_OSX
         AuthCompleted = false;
-        _auth = await FirebaseInitializer.GetAuthAsync();
+        _auth = await FB.FirebaseApp.GetAuthAsync();
         if (_auth != null)
         {
             await AuthenticateWithGameCenterAsync();

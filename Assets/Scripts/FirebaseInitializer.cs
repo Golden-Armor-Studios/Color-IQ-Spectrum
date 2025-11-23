@@ -4,56 +4,59 @@ using Firebase;
 using Firebase.Auth;
 using UnityEngine;
 
-public static class FirebaseInitializer
+namespace FB
 {
-    static TaskCompletionSource<bool> _initializationTcs;
-    static FirebaseAuth _authInstance;
-
-    public static bool IsInitialized => _initializationTcs?.Task.IsCompletedSuccessfully ?? false;
-
-    public static Task<bool> InitializeAsync()
+    public static class FirebaseApp
     {
-        if (_initializationTcs != null)
+        static TaskCompletionSource<bool> _initializationTcs;
+        static FirebaseAuth _authInstance;
+
+        public static bool IsInitialized => _initializationTcs?.Task.IsCompletedSuccessfully ?? false;
+
+        public static Task<bool> InitializeAsync()
         {
+            if (_initializationTcs != null)
+            {
+                return _initializationTcs.Task;
+            }
+
+            _initializationTcs = new TaskCompletionSource<bool>();
+            InitializeInternal();
             return _initializationTcs.Task;
         }
 
-        _initializationTcs = new TaskCompletionSource<bool>();
-        InitializeInternal();
-        return _initializationTcs.Task;
-    }
-
-    static async void InitializeInternal()
-    {
-        try
+        static async void InitializeInternal()
         {
-            var dependencyStatus = await FirebaseApp.CheckAndFixDependenciesAsync();
-            if (dependencyStatus == DependencyStatus.Available)
+            try
             {
-                _ = FirebaseApp.DefaultInstance;
-                _initializationTcs.TrySetResult(true);
-                Debug.Log("[Firebase] Initialized default app.");
+                var dependencyStatus = await global::Firebase.FirebaseApp.CheckAndFixDependenciesAsync();
+                if (dependencyStatus == DependencyStatus.Available)
+                {
+                    _ = global::Firebase.FirebaseApp.DefaultInstance;
+                    _initializationTcs.TrySetResult(true);
+                    Debug.Log("[Firebase] Initialized default app.");
+                }
+                else
+                {
+                    Debug.LogError($"[Firebase] Dependencies unavailable: {dependencyStatus}");
+                    _initializationTcs.TrySetResult(false);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                Debug.LogError($"[Firebase] Dependencies unavailable: {dependencyStatus}");
-                _initializationTcs.TrySetResult(false);
+                _initializationTcs.TrySetException(ex);
             }
         }
-        catch (Exception ex)
-        {
-            _initializationTcs.TrySetException(ex);
-        }
-    }
 
-    public static async Task<FirebaseAuth> GetAuthAsync()
-    {
-        bool initialized = await InitializeAsync();
-        if (!initialized)
+        public static async Task<FirebaseAuth> GetAuthAsync()
         {
-            return null;
-        }
+            bool initialized = await InitializeAsync();
+            if (!initialized)
+            {
+                return null;
+            }
 
-        return _authInstance ??= FirebaseAuth.DefaultInstance;
+            return _authInstance ??= FirebaseAuth.DefaultInstance;
+        }
     }
 }

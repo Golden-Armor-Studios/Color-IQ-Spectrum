@@ -24,7 +24,7 @@ public static class AnalyticsService
         }
 
         initializing = true;
-        bool ready = await FirebaseInitializer.InitializeAsync();
+        bool ready = await FB.FirebaseApp.InitializeAsync();
         firebaseInitialized = ready;
         if (ready)
         {
