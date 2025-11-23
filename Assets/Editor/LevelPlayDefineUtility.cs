@@ -21,10 +21,6 @@ public static class LevelPlayDefineUtility
         bool hasSdk = HasLevelPlaySdk();
         foreach (BuildTargetGroup group in Enum.GetValues(typeof(BuildTargetGroup)))
         {
-            if (group == BuildTargetGroup.Unknown)
-            {
-                continue;
-            }
             if (!IsValidGroup(group))
             {
                 continue;
@@ -64,18 +60,25 @@ public static class LevelPlayDefineUtility
 
     static bool IsValidGroup(BuildTargetGroup group)
     {
+        if (group == BuildTargetGroup.Unknown)
+        {
+            return false;
+        }
+#if UNITY_2021_2_OR_NEWER
+        return BuildPipeline.IsBuildTargetGroupSupported(group);
+#else
         switch (group)
         {
             case BuildTargetGroup.Standalone:
             case BuildTargetGroup.iOS:
             case BuildTargetGroup.Android:
             case BuildTargetGroup.tvOS:
-            case BuildTargetGroup.Lumin:
             case BuildTargetGroup.Switch:
                 return true;
             default:
                 return false;
         }
+#endif
     }
 }
 #endif
