@@ -14,6 +14,8 @@ public class SlashScreen : MonoBehaviour
 
     private void Start()
     {
+        FirebaseInitializer.InitializeAsync();
+
         if (splashRenderer == null)
         {
             Debug.LogWarning("Splash renderer not assigned; attempting to locate one in the same object or children.");
