@@ -20,6 +20,7 @@ public class GameController : MonoBehaviour
     bool bonusTileSpawned = false;
     bool isGameOver = false;
     bool isLoadingShareScene = false;
+    bool uiBindingWarningLogged = false;
 
     GameObject timer;
     Text timerText;
@@ -29,17 +30,35 @@ public class GameController : MonoBehaviour
     Text scoreText;
     Button shareButton;
     Button playAgainButton;
+    Button removeAdsButton;
 
+    [Header("LevelPlay (ironSource)")]
+    [SerializeField] string ironSourceAppKey = "245718645";
+    [SerializeField] string rewardedPlacementName = "98n6yjsog4opnciv";
+    [SerializeField] bool simulateRewardedAdsInEditor = true;
+
+    bool rewardedAvailable;
+    bool adShowing;
+    Action pendingRewardCallback;
 
     void Start()
     {
+        InitializeLevelPlayAds();
+
         ScoreIQ = GameObject.Find("IQScore");
         PlayAgain = GameObject.Find("PlayAgain");
         Share = GameObject.Find("Share");
+        GameObject removeAdsObject = GameObject.Find("RemoveAdsButton");
         ShareIQCanvas = GameObject.Find("ShareIQCanvas");
         ScoreIQText = ScoreIQ.GetComponent<Text>();
         playAgainButton = PlayAgain.GetComponent<Button>();
         shareButton = Share.GetComponent<Button>();
+        if (removeAdsObject != null) {
+            if (removeAdsObject.GetComponent<RemoveAdsPurchaseTrigger>() == null) {
+                removeAdsObject.AddComponent<RemoveAdsPurchaseTrigger>();
+            }
+            removeAdsButton = removeAdsObject.GetComponent<Button>();
+        }
         if (shareButton != null)
         {
             shareButton.enabled = false;
@@ -56,6 +75,15 @@ public class GameController : MonoBehaviour
         {
             shareButton.onClick.AddListener(LoadShareScene);
         }
+        if (removeAdsButton != null) {
+            removeAdsButton.onClick.AddListener(HandleRemoveAdsButton);
+            EnsureRemoveAdsButtonLayer();
+        }
+        UpdateRemoveAdsButton();
+
+        if (InAppPurchaseManager.Instance != null) {
+            InAppPurchaseManager.Instance.OnAdsRemoved += UpdateRemoveAdsButton;
+        }
         gameBoard = new GameBoard(this);
         gameBoard.buildGameBoard();
         bonusTileSpawned = false;
@@ -63,6 +91,21 @@ public class GameController : MonoBehaviour
         score = GameObject.Find("Score");
         timerText = timer.GetComponent<Text>();
         scoreText = score.GetComponent<Text>();
+    }
+
+    void OnDestroy() {
+        if (InAppPurchaseManager.Instance != null) {
+            InAppPurchaseManager.Instance.OnAdsRemoved -= UpdateRemoveAdsButton;
+        }
+#if (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
+        IronSourceEvents.onRewardedVideoAvailabilityChangedEvent -= OnRewardedVideoAvailabilityChanged;
+        IronSourceEvents.onRewardedVideoAdShowFailedEvent -= OnRewardedVideoShowFailed;
+        IronSourceEvents.onRewardedVideoAdClosedEvent -= OnRewardedVideoClosed;
+        IronSourceEvents.onRewardedVideoAdRewardedEvent -= OnRewardedVideoRewarded;
+        IronSourceEvents.onRewardedVideoAdOpenedEvent -= OnRewardedVideoOpened;
+        IronSourceEvents.onRewardedVideoAdStartedEvent -= OnRewardedVideoStarted;
+        IronSourceEvents.onRewardedVideoAdEndedEvent -= OnRewardedVideoEnded;
+#endif
     }
 
     
@@ -73,18 +116,40 @@ public class GameController : MonoBehaviour
             return;
         }
 
+        if (adShowing) {
+            // Pause time and interaction while a rewarded ad is onscreen.
+            return;
+        }
+
         TimeLeft -= Time.deltaTime;
         if (TimeLeft < 0.0f)
         {
             TimeLeft = 0.0f;
         }
-        timerText.text = Math.Floor(TimeLeft).ToString();
+        if (timerText != null) {
+            timerText.text = Math.Floor(TimeLeft).ToString();
+        } else {
+            LogMissingUIBinding("Timer");
+        }
         if (TimeLeft <= 0.0f) {
             EndGame();
             return;
         }
-        scoreText.text = gameBoard.getScore().ToString();
-        ScoreIQText.text = gameBoard.getScore().ToString();
+        if (gameBoard != null) {
+            string scoreValue = gameBoard.getScore().ToString();
+            if (scoreText != null) {
+                scoreText.text = scoreValue;
+            }
+            else {
+                LogMissingUIBinding("Score");
+            }
+            if (ScoreIQText != null) {
+                ScoreIQText.text = scoreValue;
+            }
+            else {
+                LogMissingUIBinding("IQScore");
+            }
+        }
 
         /* Temporarily disabled: late-round Level 2 tile spawn.
         if (gameBoard != null) {
@@ -117,6 +182,15 @@ public class GameController : MonoBehaviour
     }
 
     void playAgain() {
+        if (ShouldUseRewardedAds()) {
+            RequestRewardedAd(ResetAndRestart);
+            return;
+        }
+
+        ResetAndRestart();
+    }
+
+    void ResetAndRestart() {
         ShareIQCanvasSR.enabled = false;
         TimeLeft = 60f;
         scoreText.text = "0";
@@ -132,6 +206,7 @@ public class GameController : MonoBehaviour
             shareButton.interactable = false;
             shareButton.gameObject.SetActive(false);
         }
+        UpdateRemoveAdsButton();
     }
 
     void LoadShareScene() {
@@ -168,4 +243,178 @@ public class GameController : MonoBehaviour
         PlayerPrefs.SetInt(ScorePrefKey, scoreValue);
         PlayerPrefs.Save();
     }
+
+    void HandleRemoveAdsButton() {
+        if (InAppPurchaseManager.Instance == null) {
+            Debug.LogWarning("[IAP] InAppPurchaseManager not present in scene.");
+            return;
+        }
+        InAppPurchaseManager.Instance.BuyRemoveAds();
+    }
+
+    void UpdateRemoveAdsButton() {
+        bool adsRemoved = InAppPurchaseManager.Instance != null && InAppPurchaseManager.Instance.AdsRemoved;
+        if (removeAdsButton != null) {
+            removeAdsButton.gameObject.SetActive(!adsRemoved);
+            removeAdsButton.interactable = !adsRemoved;
+            EnsureRemoveAdsButtonLayer();
+        }
+    }
+
+    void EnsureRemoveAdsButtonLayer() {
+        if (removeAdsButton == null) {
+            return;
+        }
+
+        RectTransform rect = removeAdsButton.GetComponent<RectTransform>();
+        if (rect != null) {
+            rect.SetAsLastSibling();
+            Vector3 anchored = rect.anchoredPosition3D;
+            anchored.z = -10f;
+            rect.anchoredPosition3D = anchored;
+        }
+    }
+
+    void LogMissingUIBinding(string name) {
+#if UNITY_EDITOR
+        if (uiBindingWarningLogged) {
+            return;
+        }
+        Debug.LogWarning($"[UI] Missing reference for {name}. Ensure the object exists in the scene.");
+        uiBindingWarningLogged = true;
+#endif
+    }
+
+    #region Unity Ads
+
+    bool ShouldUseRewardedAds() {
+        if (InAppPurchaseManager.Instance != null && InAppPurchaseManager.Instance.AdsRemoved) {
+            return false;
+        }
+#if UNITY_EDITOR
+        return simulateRewardedAdsInEditor;
+#elif UNITY_IOS || UNITY_ANDROID
+        return rewardedAvailable;
+#else
+        return false;
+#endif
+    }
+
+    void InitializeLevelPlayAds() {
+#if (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
+        if (string.IsNullOrEmpty(ironSourceAppKey)) {
+            Debug.LogWarning("[Ads] IronSource app key missing. Rewarded ads disabled.");
+            return;
+        }
+        RegisterLevelPlayEvents();
+        IronSource.Agent.validateIntegration();
+        IronSource.Agent.shouldTrackNetworkState(true);
+        IronSource.Agent.init(ironSourceAppKey, IronSourceAdUnits.REWARDED_VIDEO);
+#else
+        rewardedAvailable = simulateRewardedAdsInEditor;
+#endif
+    }
+
+    void RegisterLevelPlayEvents() {
+#if (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
+        IronSourceEvents.onRewardedVideoAvailabilityChangedEvent += OnRewardedVideoAvailabilityChanged;
+        IronSourceEvents.onRewardedVideoAdShowFailedEvent += OnRewardedVideoShowFailed;
+        IronSourceEvents.onRewardedVideoAdClosedEvent += OnRewardedVideoClosed;
+        IronSourceEvents.onRewardedVideoAdRewardedEvent += OnRewardedVideoRewarded;
+        IronSourceEvents.onRewardedVideoAdOpenedEvent += OnRewardedVideoOpened;
+        IronSourceEvents.onRewardedVideoAdStartedEvent += OnRewardedVideoStarted;
+        IronSourceEvents.onRewardedVideoAdEndedEvent += OnRewardedVideoEnded;
+#endif
+    }
+
+    public void RequestRewardedAd(Action onComplete) {
+        if (adShowing) {
+            return;
+        }
+
+        if (!ShouldUseRewardedAds()) {
+            onComplete?.Invoke();
+            return;
+        }
+
+        pendingRewardCallback = onComplete;
+        ShowRewardedAdInternal();
+    }
+
+    void ShowRewardedAdInternal() {
+#if UNITY_EDITOR
+        if (simulateRewardedAdsInEditor) {
+            Debug.Log("[Ads] Simulating rewarded ad in editor.");
+            StartCoroutine(SimulateEditorRewardedAd());
+            return;
+        }
+#endif
+#if (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
+        if (!rewardedAvailable) {
+            Debug.LogWarning("[Ads] Rewarded ad not ready; continuing without showing.");
+            CompleteRewardSequence();
+            return;
+        }
+
+        adShowing = true;
+        Debug.Log("[Ads] Showing LevelPlay rewarded ad.");
+        if (string.IsNullOrEmpty(rewardedPlacementName)) {
+            IronSource.Agent.showRewardedVideo();
+        } else {
+            IronSource.Agent.showRewardedVideo(rewardedPlacementName);
+        }
+#else
+        CompleteRewardSequence();
+#endif
+    }
+
+    IEnumerator SimulateEditorRewardedAd() {
+        adShowing = true;
+        yield return new WaitForSeconds(0.5f);
+        adShowing = false;
+        CompleteRewardSequence();
+    }
+
+    void CompleteRewardSequence() {
+        var callback = pendingRewardCallback;
+        pendingRewardCallback = null;
+        callback?.Invoke();
+    }
+
+#if (UNITY_IOS || UNITY_ANDROID) && !UNITY_EDITOR
+    void OnRewardedVideoAvailabilityChanged(bool available) {
+        rewardedAvailable = available;
+        Debug.Log($"[Ads] Rewarded availability changed: {available}");
+    }
+
+    void OnRewardedVideoShowFailed(IronSourceError error) {
+        Debug.LogWarning($"[Ads] Rewarded show failed: {error.getDescription()}");
+        adShowing = false;
+        CompleteRewardSequence();
+    }
+
+    void OnRewardedVideoClosed() {
+        Debug.Log("[Ads] Rewarded ad closed.");
+        adShowing = false;
+        CompleteRewardSequence();
+    }
+
+    void OnRewardedVideoRewarded(IronSourcePlacement placement) {
+        Debug.Log($"[Ads] Reward granted: {placement?.getRewardName() ?? "reward"}");
+    }
+
+    void OnRewardedVideoOpened() {
+        Debug.Log("[Ads] Rewarded ad opened.");
+    }
+
+    void OnRewardedVideoStarted() {
+        Debug.Log("[Ads] Rewarded ad started.");
+    }
+
+    void OnRewardedVideoEnded() {
+        Debug.Log("[Ads] Rewarded ad ended.");
+    }
+#endif
+
+    #endregion
 }

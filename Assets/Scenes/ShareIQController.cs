@@ -1,355 +1,487 @@
-using System.Collections;
-using System.IO;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
-#if UNITY_ADS
-using UnityEngine.Advertisements;
-#endif
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+#if UNITY_IOS || UNITY_EDITOR_OSX
+using Apple.GameKit;
+using Apple.GameKit.Leaderboards;
+#endif
 
 public class ShareIQController : MonoBehaviour
 {
     private const string ScorePrefKey = "ShareIQScore";
-    private const string AppStoreUrl = "https://apps.apple.com/app/id0000000000"; // TODO: replace with your real App Store URL.
-    private const int ShareImageWidth = 1200;
-    private const int ShareImageHeight = 630;
-    private const string iOSGameId = "5968456";
-    private const string androidGameId = ""; // TODO: replace with your Android Game ID when available.
-    private const string bannerPlacementId = "Banner_iOS"; // TODO: update to match the placement name set up in the Unity Dashboard.
 
-    [SerializeField]
-    private bool testMode = true;
+#if UNITY_IOS || UNITY_EDITOR_OSX
+    [Header("Game Center")]
+    [SerializeField] private string leaderboardId = "com.goldenarmorstudio.coloriq.leaderboard";
+    [SerializeField] private string achievementId = "com.goldenarmorstudio.coloriq.achievement";
+    [SerializeField] private string firstPlayAchievementId = "ColorIQSpectrumFirstIQ";
+    private const string FirstPlayPrefKey = "ColorIQSpectrumFirstPlayAwarded";
+#endif
 
-    private bool adsInitialized;
-    private bool bannerLoaded;
-    private bool bannerShowing;
-    private Text scoreValueText;
-    private Button playAgainButton;
-    private Button shareButton;
-    private GameObject bannerPlaceholder;
-    private bool isSharing;
+    private Text userScoreText;
+    private Text messageText;
+    private readonly List<Text> leaderboardEntryTexts = new List<Text>(10);
+    private bool uiBuilt;
+    [Header("Monetization")]
+    [SerializeField] private List<GameObject> additionalMonetizationObjects = new List<GameObject>();
+    private readonly List<GameObject> monetizationTargets = new List<GameObject>();
+    [SerializeField] private GameObject removeAdsObject;
+    [SerializeField] private string removeAdsObjectName = "RemoveAdsButton";
+    private Button removeAdsButton;
+    private RectTransform leaderboardPanel;
 
-    void Awake()
+    private async void Start()
     {
-#if UNITY_ADS
-        StartCoroutine(InitializeAdsRoutine());
+        BuildScoreboardUI();
+        InitializeMonetizationUI();
+        await SetupDataAsync();
+        UpdateMonetizationVisibility();
+    }
+
+    private void OnEnable()
+    {
+        SubscribeToAdsRemovedEvents(true);
+    }
+
+    private void OnDisable()
+    {
+        SubscribeToAdsRemovedEvents(false);
+    }
+
+    private async Task SetupDataAsync()
+    {
+#if UNITY_IOS || UNITY_EDITOR_OSX
+        await UpdateGameCenterDataAsync();
 #else
-        Debug.LogWarning("Unity Ads not enabled. Skipping ad initialization.");
+        UpdateUserScoreUI(GetStoredScore(), null);
+        ShowMessage("Game Center leaderboard available on iOS builds.");
 #endif
     }
 
-    void Start()
+    private void BuildScoreboardUI()
     {
-        CacheUI();
-        DisplayScore();
-        SetBannerPlaceholderVisible(true);
-    }
-
-#if UNITY_ADS
-    private IEnumerator InitializeAdsRoutine()
-    {
-        if (adsInitialized)
+        if (uiBuilt)
         {
-            yield break;
+            return;
         }
 
-#if UNITY_IOS
-        string gameId = iOSGameId;
-#elif UNITY_ANDROID
-        string gameId = string.IsNullOrEmpty(androidGameId) ? iOSGameId : androidGameId;
-#else
-        string gameId = iOSGameId;
-#endif
-
-        if (string.IsNullOrEmpty(gameId))
+        var canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
         {
-            Debug.LogWarning("Unity Ads initialization skipped: no valid game ID configured for this platform.");
-            yield break;
+            Debug.LogError("[ShareIQ] Canvas not found in scene.");
+            return;
         }
 
-        if (!Advertisement.isInitialized)
+        foreach (Transform child in canvas.transform)
         {
-            Advertisement.Initialize(gameId, testMode);
-            float timeout = 15f;
-            while (!Advertisement.isInitialized && timeout > 0f)
+            if (child.gameObject.name == removeAdsObjectName)
             {
-                timeout -= Time.unscaledDeltaTime;
-                yield return null;
+                continue;
+            }
+            child.gameObject.SetActive(false);
+        }
+
+        var panelGO = new GameObject("LeaderboardPanel", typeof(RectTransform), typeof(RoundedPanel));
+        var panelRect = panelGO.GetComponent<RectTransform>();
+        panelRect.SetParent(canvas.transform, false);
+        panelRect.anchorMin = new Vector2(0.1f, 0.1f);
+        panelRect.anchorMax = new Vector2(0.9f, 0.9f);
+        panelRect.offsetMin = panelRect.offsetMax = Vector2.zero;
+        leaderboardPanel = panelRect;
+        var roundedPanel = panelGO.GetComponent<RoundedPanel>();
+        roundedPanel.color = new Color(0.05f, 0.07f, 0.11f, 0.95f);
+        roundedPanel.NormalizedCornerRadius = 0.08f;
+
+        var layout = panelGO.AddComponent<VerticalLayoutGroup>();
+        layout.childAlignment = TextAnchor.UpperCenter;
+        layout.childControlHeight = true;
+        layout.childControlWidth = true;
+        layout.childForceExpandHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.spacing = 12f;
+        layout.padding = new RectOffset(24, 24, 24, 24);
+
+        userScoreText = CreateText("UserScore", panelRect, 84, FontStyle.Bold, TextAnchor.MiddleCenter);
+        messageText = CreateText("Message", panelRect, 37, FontStyle.Italic, TextAnchor.MiddleCenter);
+        messageText.color = new Color(0.85f, 0.85f, 0.85f, 1f);
+
+        var header = CreateText("Header", panelRect, 74, FontStyle.Bold, TextAnchor.MiddleCenter);
+        header.text = "Top 10 Global Scores";
+
+        for (int i = 0; i < 10; i++)
+        {
+            var entry = CreateText($"Entry{i + 1}", panelRect, 73, FontStyle.Normal, TextAnchor.MiddleLeft);
+            entry.text = $"{i + 1}. —";
+            leaderboardEntryTexts.Add(entry);
+        }
+
+        var playAgainButton = CreateButton("PlayAgainButton", panelRect, "Play Again", 78, 150f);
+        playAgainButton.onClick.AddListener(RestartGameScene);
+
+#if UNITY_IOS || UNITY_EDITOR_OSX
+        var challengeButton = CreateButton("ChallengeButton", panelRect, "Challenge Friends", 68);
+        challengeButton.onClick.AddListener(OnChallengeFriendsClicked);
+        challengeButton.gameObject.SetActive(!Application.isEditor);
+#endif
+
+        uiBuilt = true;
+    }
+
+    private static Text CreateText(string name, RectTransform parent, int fontSize, FontStyle style, TextAnchor anchor)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        var rect = go.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+
+        var text = go.AddComponent<Text>();
+        text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        text.fontSize = fontSize;
+        text.fontStyle = style;
+        text.alignment = anchor;
+        text.color = Color.white;
+        text.horizontalOverflow = HorizontalWrapMode.Overflow;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+
+        return text;
+    }
+
+    private Button CreateButton(string name, RectTransform parent, string label, int fontSize = 22, float fixedHeight = -1f)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+        var rect = go.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        float height = fixedHeight > 0f ? fixedHeight : 120f;
+        rect.sizeDelta = new Vector2(0f, height);
+
+        var layoutElement = go.AddComponent<LayoutElement>();
+        layoutElement.minHeight = height;
+        layoutElement.preferredHeight = height;
+        layoutElement.flexibleHeight = 0;
+        layoutElement.minWidth = 400f;
+        layoutElement.flexibleWidth = 1f;
+
+        var image = go.GetComponent<Image>();
+        image.color = new Color(0.15f, 0.35f, 0.55f, 1f);
+
+        var button = go.AddComponent<Button>();
+        var colors = button.colors;
+        colors.highlightedColor = new Color(0.2f, 0.45f, 0.65f, 1f);
+        colors.pressedColor = new Color(0.1f, 0.25f, 0.4f, 1f);
+        button.colors = colors;
+
+        var text = CreateText($"{name}_Label", rect, fontSize, FontStyle.Bold, TextAnchor.MiddleCenter);
+        text.text = label;
+
+        return button;
+    }
+
+    private void InitializeMonetizationUI()
+    {
+        EnsureRemoveAdsReference();
+        foreach (var extraObject in additionalMonetizationObjects)
+        {
+            RegisterMonetizationObject(extraObject);
+        }
+    }
+
+    private void RegisterMonetizationObject(GameObject target)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        if (!monetizationTargets.Contains(target))
+        {
+            monetizationTargets.Add(target);
+        }
+    }
+
+    private void EnsureRemoveAdsReference()
+    {
+        if (removeAdsObject == null)
+        {
+            removeAdsObject = GameObject.Find(removeAdsObjectName);
+        }
+
+        if (removeAdsObject == null)
+        {
+            Debug.LogWarning("[ShareIQ] RemoveAdsButton object not found in scene.");
+            return;
+        }
+
+        if (removeAdsObject.GetComponent<RemoveAdsPurchaseTrigger>() == null)
+        {
+            removeAdsObject.AddComponent<RemoveAdsPurchaseTrigger>();
+        }
+
+        removeAdsButton = removeAdsObject.GetComponent<Button>();
+        if (removeAdsButton == null)
+        {
+            Debug.LogWarning("[ShareIQ] RemoveAdsButton is missing a Button component.");
+        }
+        else
+        {
+            removeAdsButton.onClick.RemoveListener(HandleRemoveAdsButton);
+            removeAdsButton.onClick.AddListener(HandleRemoveAdsButton);
+        }
+
+        RegisterMonetizationObject(removeAdsObject);
+    }
+
+    private void RestartGameScene()
+    {
+        UnityEngine.SceneManagement.SceneManager.LoadScene("GameScene");
+    }
+
+    private int GetStoredScore() => PlayerPrefs.GetInt(ScorePrefKey, 0);
+
+    private void UpdateUserScoreUI(int score, long? rank)
+    {
+        if (userScoreText == null)
+        {
+            return;
+        }
+
+        userScoreText.text = rank.HasValue
+            ? $"Your Color IQ: {score} (Rank #{rank.Value})"
+            : $"Your Color IQ: {score}";
+    }
+
+    private void ShowMessage(string text)
+    {
+        if (messageText != null)
+        {
+            messageText.text = text;
+        }
+    }
+
+    private void UpdateLeaderboardUI(List<(long rank, string alias, long score)> entries)
+    {
+        for (int i = 0; i < leaderboardEntryTexts.Count; i++)
+        {
+            var label = leaderboardEntryTexts[i];
+            if (label == null)
+            {
+                continue;
+            }
+
+            if (i < entries.Count)
+            {
+                var entry = entries[i];
+                label.text = $"{entry.rank,2}. {entry.alias} — {entry.score}";
+            }
+            else
+            {
+                label.text = $"{i + 1}. —";
             }
         }
-
-        if (!Advertisement.isInitialized)
-        {
-            Debug.LogError("Unity Ads failed to initialize.");
-            yield break;
-        }
-
-        adsInitialized = true;
-        Debug.Log("Unity Ads initialization complete.");
-
-        LoadBanner();
     }
 
-    private void LoadBanner()
+    private void HandleRemoveAdsButton()
     {
-        if (!adsInitialized)
+        var manager = InAppPurchaseManager.Instance;
+        if (manager == null)
         {
+            Debug.LogWarning("[IAP] InAppPurchaseManager not present in scene.");
             return;
         }
 
-        bannerLoaded = false;
-        bannerShowing = false;
-
-        SetBannerPlaceholderVisible(true);
-
-        Advertisement.Banner.SetPosition(BannerPosition.BOTTOM_CENTER);
-
-        BannerLoadOptions loadOptions = new BannerLoadOptions
-        {
-            loadCallback = OnBannerLoaded,
-            errorCallback = OnBannerError
-        };
-
-        Advertisement.Banner.Load(bannerPlacementId, loadOptions);
+        manager.BuyRemoveAds();
     }
 
-    private void OnBannerLoaded()
+    private void UpdateMonetizationVisibility()
     {
-        Debug.Log("Unity Ads banner loaded.");
-        bannerLoaded = true;
-        ShowBanner();
-    }
+        bool adsRemoved = InAppPurchaseManager.Instance != null && InAppPurchaseManager.Instance.AdsRemoved;
+        bool shouldShow = !adsRemoved;
 
-    private void OnBannerError(string message)
-    {
-        Debug.LogWarning($"Unity Ads banner failed to load: {message}");
-        bannerLoaded = false;
-        bannerShowing = false;
-        SetBannerPlaceholderVisible(true);
-    }
-
-    private void ShowBanner()
-    {
-        if (!adsInitialized || !bannerLoaded)
+        foreach (var target in monetizationTargets)
         {
-            return;
-        }
-
-        if (bannerShowing)
-        {
-            return;
-        }
-
-        BannerOptions showOptions = new BannerOptions
-        {
-            clickCallback = () => Debug.Log("Unity Ads banner clicked."),
-            hideCallback = () => Debug.Log("Unity Ads banner hidden."),
-            showCallback = () =>
+            if (target == null)
             {
-                Debug.Log("Unity Ads banner shown.");
-                SetBannerPlaceholderVisible(false);
+                continue;
             }
-        };
 
-        Advertisement.Banner.Show(bannerPlacementId, showOptions);
-        bannerShowing = true;
+            if (target.activeSelf != shouldShow)
+            {
+                target.SetActive(shouldShow);
+            }
+
+            var button = target.GetComponent<Button>();
+            if (button != null)
+            {
+                button.interactable = shouldShow;
+            }
+        }
     }
-#endif // UNITY_ADS
 
-    private void HideBanner(bool destroy = true, bool showPlaceholder = true)
+    private void SubscribeToAdsRemovedEvents(bool subscribe)
     {
-#if UNITY_ADS
-        if (!adsInitialized)
+        var manager = InAppPurchaseManager.Instance;
+        if (manager == null)
         {
             return;
         }
 
-        if (!bannerLoaded && !bannerShowing)
+        if (subscribe)
         {
+            manager.OnAdsRemoved += UpdateMonetizationVisibility;
+        }
+        else
+        {
+            manager.OnAdsRemoved -= UpdateMonetizationVisibility;
+        }
+    }
+
+#if UNITY_IOS || UNITY_EDITOR_OSX
+    private async Task UpdateGameCenterDataAsync()
+    {
+        int score = GetStoredScore();
+        UpdateUserScoreUI(score, null);
+
+        if (Application.isEditor)
+        {
+            ShowMessage("Leaderboard loads on device builds.");
             return;
         }
 
-        Advertisement.Banner.Hide(destroy);
-        bannerShowing = false;
-#endif
-        SetBannerPlaceholderVisible(showPlaceholder);
-    }
-
-    private void CacheUI()
-    {
-        GameObject scoreValueObject = GameObject.Find("ScoreValue");
-        if (scoreValueObject != null)
+        var localPlayer = GKLocalPlayer.Local;
+        if (localPlayer == null || !localPlayer.IsAuthenticated)
         {
-            scoreValueText = scoreValueObject.GetComponent<Text>();
-        }
-
-        GameObject playAgainObject = GameObject.Find("PlayAgainButton");
-        if (playAgainObject != null)
-        {
-            playAgainButton = playAgainObject.GetComponent<Button>();
-            playAgainButton.onClick.AddListener(HandlePlayAgainClicked);
-        }
-
-        GameObject shareButtonObject = GameObject.Find("ShareButton");
-        if (shareButtonObject != null)
-        {
-            shareButton = shareButtonObject.GetComponent<Button>();
-            shareButton.onClick.AddListener(() => StartCoroutine(ShareScoreRoutine()));
-        }
-
-        bannerPlaceholder = GameObject.Find("BannerPlaceholder");
-    }
-
-    private void DisplayScore()
-    {
-        if (scoreValueText == null)
-        {
+            ShowMessage("Sign into Game Center to view leaderboard.");
             return;
         }
 
-        int score = PlayerPrefs.GetInt(ScorePrefKey, 0);
-        scoreValueText.text = score.ToString("000");
-    }
+        ShowMessage("Syncing with Game Center…");
 
-    private void HandlePlayAgainClicked()
-    {
-        HideBanner();
-        SceneManager.LoadScene("GameScene");
-    }
-
-    private IEnumerator ShareScoreRoutine()
-    {
-        if (isSharing)
+        GKLeaderboard leaderboard = await ResolveLeaderboardAsync();
+        if (leaderboard == null)
         {
-            yield break;
+            ShowMessage("Leaderboard not found. Check the ID in ShareIQController.");
+            return;
         }
 
-        isSharing = true;
+        await SubmitScoreAsync(leaderboard, score, localPlayer);
+        await GameCenterService.ReportAchievementAsync(achievementId, 100.0);
+        await AwardFirstPlayAchievementAsync();
+        await LoadLeaderboardEntriesAsync(leaderboard, score);
+    }
 
-        bool bannerWasShowing = bannerShowing;
-        HideBanner(false, false);
-        bool placeholderWasActive = bannerPlaceholder != null && bannerPlaceholder.activeSelf;
-        SetBannerPlaceholderVisible(false);
-
-        if (shareButton != null)
+    private async Task<GKLeaderboard> ResolveLeaderboardAsync()
+    {
+        if (string.IsNullOrEmpty(leaderboardId))
         {
-            shareButton.interactable = false;
+            return null;
         }
-
-        yield return new WaitForEndOfFrame();
-        yield return new WaitForEndOfFrame();
-
-        Texture2D screenshot = null;
-        Texture2D shareTexture = null;
 
         try
         {
-            screenshot = ScreenCapture.CaptureScreenshotAsTexture();
-            if (screenshot == null)
+            var leaderboards = await GKLeaderboard.LoadLeaderboards(leaderboardId);
+            if (leaderboards != null && leaderboards.Count > 0)
             {
-                Debug.LogWarning("[ShareIQ] Failed to capture screenshot for sharing.");
-                yield break;
+                return leaderboards[0];
             }
-
-            shareTexture = CreateShareImage(screenshot, ShareImageWidth, ShareImageHeight, new Color32(12, 18, 24, 255));
-
-            byte[] pngData = shareTexture.EncodeToPNG();
-            string sharePath = Path.Combine(Application.temporaryCachePath, "coloriq-share.png");
-            File.WriteAllBytes(sharePath, pngData);
-#if UNITY_IOS && !UNITY_EDITOR
-            UnityEngine.iOS.Device.SetNoBackupFlag(sharePath);
-#endif
-
-            int score = PlayerPrefs.GetInt(ScorePrefKey, 0);
-            string message = ComposeShareMessage(score);
-
-            IOSShare.ShareImage(sharePath, message);
         }
         catch (System.Exception ex)
         {
-            Debug.LogError($"[ShareIQ] Failed to share score: {ex}");
+            Debug.LogError($"[ShareIQ] Failed to load leaderboard list: {ex}");
         }
-        finally
+
+        return null;
+    }
+
+    private async Task SubmitScoreAsync(GKLeaderboard leaderboard, int score, GKPlayer player)
+    {
+        try
         {
-            if (screenshot != null)
+            await leaderboard.SubmitScore(score, 0, player);
+            Debug.Log($"[ShareIQ] Submitted score {score} to leaderboard '{leaderboardId}'.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[ShareIQ] Failed to submit leaderboard score: {ex}");
+        }
+    }
+
+    private async Task LoadLeaderboardEntriesAsync(GKLeaderboard leaderboard, int localScore)
+    {
+        try
+        {
+            GKLeaderboardLoadEntriesResponse response =
+                await leaderboard.LoadEntries(GKLeaderboard.PlayerScope.Global, GKLeaderboard.TimeScope.AllTime, 1, 10);
+
+            var entries = new List<(long rank, string alias, long score)>();
+            if (response.Entries != null)
             {
-                UnityEngine.Object.Destroy(screenshot);
+                foreach (var entry in response.Entries)
+                {
+                    string alias = entry.Player?.DisplayName ?? "Player";
+                    entries.Add((entry.Rank, alias, entry.Score));
+                }
             }
 
-            if (shareTexture != null)
+            long? rank = null;
+            if (response.LocalPlayerEntry != null)
             {
-                UnityEngine.Object.Destroy(shareTexture);
+                rank = response.LocalPlayerEntry.Rank;
             }
 
-            if (shareButton != null)
-            {
-                shareButton.interactable = true;
-            }
+            UpdateUserScoreUI(localScore, rank);
+            UpdateLeaderboardUI(entries);
+            ShowMessage(entries.Count > 0 ? string.Empty : "No leaderboard data yet.");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[ShareIQ] Failed to load leaderboard entries: {ex}");
+            ShowMessage("Unable to load leaderboard entries.");
+        }
+    }
 
-            isSharing = false;
+    private async Task AwardFirstPlayAchievementAsync()
+    {
+        if (string.IsNullOrEmpty(firstPlayAchievementId))
+        {
+            return;
+        }
 
-#if UNITY_ADS
-            if (bannerWasShowing && adsInitialized)
-            {
-                LoadBanner();
-            }
-            else
+        if (PlayerPrefs.GetInt(FirstPlayPrefKey, 0) == 1)
+        {
+            return;
+        }
+
+        await GameCenterService.ReportAchievementAsync(firstPlayAchievementId, 100.0);
+        PlayerPrefs.SetInt(FirstPlayPrefKey, 1);
+        PlayerPrefs.Save();
+    }
 #endif
-            {
-                SetBannerPlaceholderVisible(placeholderWasActive);
-            }
-        }
-    }
 
-    private void OnDestroy()
+#if UNITY_IOS || UNITY_EDITOR_OSX
+    private async void OnChallengeFriendsClicked()
     {
-        HideBanner();
-    }
-
-    private void SetBannerPlaceholderVisible(bool visible)
-    {
-        if (bannerPlaceholder != null)
+        if (Application.isEditor)
         {
-            bannerPlaceholder.SetActive(visible && !isSharing);
+            ShowMessage("Challenges run on device builds.");
+            return;
         }
-    }
 
-    private Texture2D CreateShareImage(Texture2D source, int targetWidth, int targetHeight, Color background)
-    {
-        Texture2D result = new Texture2D(targetWidth, targetHeight, TextureFormat.RGBA32, false);
-
-        source.filterMode = FilterMode.Bilinear;
-
-        Color[] fill = new Color[targetWidth * targetHeight];
-        for (int i = 0; i < fill.Length; i++)
+        var localPlayer = GKLocalPlayer.Local;
+        if (localPlayer == null || !localPlayer.IsAuthenticated)
         {
-            fill[i] = background;
+            ShowMessage("Sign into Game Center to challenge friends.");
+            return;
         }
-        result.SetPixels(fill);
 
-        float scale = Mathf.Min(targetWidth / (float)source.width, targetHeight / (float)source.height);
-        int scaledWidth = Mathf.RoundToInt(source.width * scale);
-        int scaledHeight = Mathf.RoundToInt(source.height * scale);
-        int offsetX = (targetWidth - scaledWidth) / 2;
-        int offsetY = (targetHeight - scaledHeight) / 2;
-
-        for (int y = 0; y < scaledHeight; y++)
+        try
         {
-            float v = (y + 0.5f) / scaledHeight;
-            for (int x = 0; x < scaledWidth; x++)
-            {
-                float u = (x + 0.5f) / scaledWidth;
-                Color pixel = source.GetPixelBilinear(u, v);
-                result.SetPixel(offsetX + x, offsetY + y, pixel);
-            }
+            await GKAccessPoint.Shared.TriggerForChallenges();
+            ShowMessage("Game Center challenge launched. Tell your friends: 'youcantbeatme'.");
         }
-
-        result.Apply();
-        return result;
+        catch (System.Exception ex)
+        {
+            Debug.LogError($"[ShareIQ] Challenge failed: {ex}");
+            ShowMessage("Failed to send challenge.");
+        }
     }
-
-    private string ComposeShareMessage(int score)
-    {
-        return $"I hit {score} IQ in Color IQ! Beat me => {AppStoreUrl}";
-    }
+#endif
 }

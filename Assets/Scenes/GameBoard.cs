@@ -36,6 +36,8 @@ public class GameBoard
 
     private const float CorrectPieceRatio = 0.15f;
     private const int MinimumCorrectPieces = 2;
+    private const int LateGameReductionStartScore = 50;
+    private const int LateGameReductionEndScore = 100;
     private const float MinHueContrast = 0.25f;
     private const float MaxHueContrast = 0.5f;
     private const float MaxPieceSize = 0.72f;
@@ -43,12 +45,15 @@ public class GameBoard
     private const float PieceRadiusScale = 0.45f;
     private const float DifficultyRampSpan = 8f;
 
+    private readonly GameController controller;
+
     public GameBoard (MonoBehaviour host) {
         bonusTileIndex = -1;
         GameBoardHeight = 800;
         GameBoardWidth = 600;
         level = 2;
         gamePieceCount = 40;
+        controller = host as GameController;
         CorrectPointObject = GameObject.Find("DTSound-Correct_Point");
         InccorectPointObject = GameObject.Find("DTSound-Incorrect_Point");
         LevelUpObject = GameObject.Find("DTSound-Level-Up");
@@ -111,9 +116,7 @@ public class GameBoard
 
         gamePieceCount = gridPositions.Count;
 
-        int correctPiecesTarget = isTheSameColor
-            ? gamePieceCount
-            : Mathf.Clamp(Mathf.RoundToInt(gamePieceCount * CorrectPieceRatio), MinimumCorrectPieces, gamePieceCount);
+        int correctPiecesTarget = CalculateCorrectPieceTarget(gamePieceCount, isTheSameColor);
 
         HashSet<int> correctPieceIndices = isTheSameColor
             ? BuildSequentialIndexSet(gamePieceCount)
@@ -192,6 +195,27 @@ public class GameBoard
         return Rect.MinMaxRect(playableLeft, playableBottom, playableRight, playableTop);
     }
 
+    // Gradually shrink the pool of matching tiles once the player hits late-game levels.
+    private int CalculateCorrectPieceTarget(int pieceCount, bool isUniformBoard) {
+        if (pieceCount <= 0) {
+            return 0;
+        }
+
+        if (isUniformBoard) {
+            return pieceCount;
+        }
+
+        int baseCount = Mathf.Clamp(Mathf.RoundToInt(pieceCount * CorrectPieceRatio), MinimumCorrectPieces, pieceCount);
+        if (score < LateGameReductionStartScore) {
+            return baseCount;
+        }
+
+        float reductionSpan = Mathf.Max(1f, LateGameReductionEndScore - LateGameReductionStartScore);
+        float normalizedProgress = Mathf.Clamp01((score - LateGameReductionStartScore) / reductionSpan);
+        int rampedCount = Mathf.RoundToInt(Mathf.Lerp(baseCount, 1f, normalizedProgress));
+        return Mathf.Clamp(rampedCount, 1, pieceCount);
+    }
+
     public void addPoints(string name, RaycastHit2D hit, setTimeDelegate setTime) {
         GameObject touchedPiece = hit.collider != null ? hit.collider.gameObject : null;
         if (!IsGamePiece(touchedPiece)) {
@@ -232,10 +256,18 @@ public class GameBoard
         if (score % 10 == 0) {
             level++;
             LevelUp.Play();
-            setTime(30.0f);
-            VideoBackgroundSR.transform.position = new Vector3(0, -5, 1);
-            removeGamePieces();
-            buildGameBoard(true);
+            setTime(10.0f);
+            System.Action rebuildLevelBoard = () => {
+                VideoBackgroundSR.transform.position = new Vector3(0, -5, 1);
+                removeGamePieces();
+                buildGameBoard(true);
+            };
+            bool shouldShowLevelVideoAd = level == 10;
+            if (controller != null && shouldShowLevelVideoAd) {
+                controller.RequestRewardedAd(rebuildLevelBoard);
+            } else {
+                rebuildLevelBoard();
+            }
         } else {
             VideoBackgroundSR.transform.position = new Vector3(0, VideoBackgroundSR.transform.position.y + 0.5f , 1);
             removeGamePieces();
