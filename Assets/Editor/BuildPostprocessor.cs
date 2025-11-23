@@ -30,15 +30,11 @@ public static class BuildPostprocessor
         const string disableEntitlementsValidationKey = "CODE_SIGN_ALLOW_ENTITLEMENT_WRITES";
         const string disableEntitlementsValidationValue = "YES";
 
-        if (!string.IsNullOrEmpty(mainTarget))
+        var targetGuids = project.GetAllTargetGuids();
+        foreach (var targetGuid in targetGuids)
         {
-            project.SetBuildProperty(mainTarget, key, value);
-            project.SetBuildProperty(mainTarget, disableEntitlementsValidationKey, disableEntitlementsValidationValue);
-        }
-        if (!string.IsNullOrEmpty(frameworkTarget))
-        {
-            project.SetBuildProperty(frameworkTarget, key, value);
-            project.SetBuildProperty(frameworkTarget, disableEntitlementsValidationKey, disableEntitlementsValidationValue);
+            project.SetBuildProperty(targetGuid, key, value);
+            project.SetBuildProperty(targetGuid, disableEntitlementsValidationKey, disableEntitlementsValidationValue);
         }
 
         string projectGuid = project.ProjectGuid();
