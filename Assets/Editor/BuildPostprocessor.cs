@@ -30,7 +30,25 @@ public static class BuildPostprocessor
         const string disableEntitlementsValidationKey = "CODE_SIGN_ALLOW_ENTITLEMENT_WRITES";
         const string disableEntitlementsValidationValue = "YES";
 
-        var targetGuids = project.GetAllTargetGuids();
+        var targetGuids = new System.Collections.Generic.HashSet<string>();
+        void AddTarget(string guid)
+        {
+            if (!string.IsNullOrEmpty(guid))
+            {
+                targetGuids.Add(guid);
+            }
+        }
+
+        AddTarget(project.ProjectGuid());
+
+#if UNITY_2019_3_OR_NEWER
+        AddTarget(project.GetUnityMainTargetGuid());
+        AddTarget(project.GetUnityFrameworkTargetGuid());
+#else
+        AddTarget(project.TargetGuidByName(PBXProject.GetUnityTargetName()));
+        AddTarget(project.TargetGuidByName("UnityFramework"));
+#endif
+
         foreach (var targetGuid in targetGuids)
         {
             project.SetBuildProperty(targetGuid, key, value);
