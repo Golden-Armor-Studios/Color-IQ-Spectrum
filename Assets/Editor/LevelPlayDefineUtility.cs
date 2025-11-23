@@ -64,7 +64,7 @@ public static class LevelPlayDefineUtility
         {
             return false;
         }
-#if UNITY_2021_2_OR_NEWER
+#if UNITY_2022_1_OR_NEWER
         return BuildPipeline.IsBuildTargetGroupSupported(group);
 #else
         switch (group)
