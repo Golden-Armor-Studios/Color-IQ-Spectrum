@@ -71,7 +71,6 @@ public static class LevelPlayDefineUtility
             case BuildTargetGroup.Android:
             case BuildTargetGroup.tvOS:
             case BuildTargetGroup.WSA:
-            case BuildTargetGroup.macOS:
             case BuildTargetGroup.Switch:
                 return true;
             default:
