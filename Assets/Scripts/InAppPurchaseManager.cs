@@ -56,9 +56,9 @@ public class InAppPurchaseManager : MonoBehaviour
         }
 
         var builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance());
-        var mappedIds = new UnityEngine.Purchasing.Extension.StoreSpecificIds();
-        mappedIds.Add(GooglePlay.Name, removeAdsProductId);
-        mappedIds.Add(AppleAppStore.Name, string.IsNullOrEmpty(appleStoreProductId) ? removeAdsProductId : appleStoreProductId);
+        var mappedIds = new IDs();
+        mappedIds.Add(removeAdsProductId, GooglePlay.Name);
+        mappedIds.Add(string.IsNullOrEmpty(appleStoreProductId) ? removeAdsProductId : appleStoreProductId, AppleAppStore.Name);
         builder.AddProduct(removeAdsProductId, ProductType.NonConsumable, mappedIds);
         UnityPurchasing.Initialize(this, builder);
     }
