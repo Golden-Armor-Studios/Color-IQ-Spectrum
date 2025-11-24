@@ -36,6 +36,10 @@
 /Packages/*
 !/Packages/manifest.json
 !/Packages/packages-lock.json
+!/Packages/com.apple.unityplugin.core/
+!/Packages/com.apple.unityplugin.core/**
+!/Packages/com.apple.unityplugin.gamekit/
+!/Packages/com.apple.unityplugin.gamekit/**
 
 # Local settings
 /ProjectSettings/ProjectSettings.asset
@@ -64,3 +68,5 @@ Desktop.ini
 
 # Crash reports
 /CrashReports/
+# Unity Xcode export
+/ColorIQBuild/
