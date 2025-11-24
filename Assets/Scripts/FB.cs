@@ -143,6 +143,7 @@ namespace FB
     public static class Auth
     {
         static FirebaseAuth _firebaseAuth;
+        public static FirebaseUser CurrentUser { get; private set; }
         public static bool AuthCompleted { get; private set; }
 
         public static async Task SignInWithGameCenterAsync(string conversionPrefKey)
@@ -191,6 +192,7 @@ namespace FB
                 var user = await _firebaseAuth.SignInWithCredentialAsync(credential);
                 Debug.Log($"[GameCenterAuth] Firebase signed in via Game Center as {user.DisplayName ?? user.UserId}.");
 
+                CurrentUser = user;
                 if (PlayerPrefs.GetInt(conversionPrefKey, 0) == 0)
                 {
                     AnalyticsService.LogGameCenterConversion();
