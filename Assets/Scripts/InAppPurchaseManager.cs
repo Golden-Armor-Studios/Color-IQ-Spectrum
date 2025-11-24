@@ -14,7 +14,7 @@ public class InAppPurchaseManager : MonoBehaviour
 
     private const string RemoveAdsPrefKey = "ColorIQ_RemoveAds";
     [SerializeField] string removeAdsProductId = "color_iq_remove_ads";
-    [SerializeField] bool simulatePurchaseInEditor = true;
+    [SerializeField] bool simulatePurchaseInEditor = false;
 #if UNITY_IOS || UNITY_EDITOR_OSX
     [SerializeField] string vipAchievementId = "ColorIQSpectrumVIP";
 #endif
@@ -68,7 +68,7 @@ public class InAppPurchaseManager : MonoBehaviour
         }
 
 #if UNITY_PURCHASING
-        if (simulatePurchaseInEditor || Application.isEditor)
+        if (Application.isEditor && simulatePurchaseInEditor)
         {
             CompleteRemoveAdsPurchase();
             return;
