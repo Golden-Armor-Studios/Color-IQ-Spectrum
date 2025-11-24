@@ -141,7 +141,12 @@ public class InAppPurchaseManager : MonoBehaviour
 #endif
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    static void EnsureInstanceExists()
+    static void EnsureInstanceExistsOnLoad()
+    {
+        EnsureInstanceExists();
+    }
+
+    public static void EnsureInstanceExists()
     {
         if (Instance != null)
         {
@@ -151,6 +156,7 @@ public class InAppPurchaseManager : MonoBehaviour
         var existing = UnityEngine.Object.FindObjectOfType<InAppPurchaseManager>();
         if (existing != null)
         {
+            Instance = existing;
             return;
         }
 

@@ -43,6 +43,7 @@ public class GameController : MonoBehaviour
 
     void Start()
     {
+        InAppPurchaseManager.EnsureInstanceExists();
         InitializeLevelPlayAds();
 
         ScoreIQ = GameObject.Find("IQScore");
