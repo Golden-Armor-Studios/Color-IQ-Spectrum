@@ -101,8 +101,8 @@ public class ShareIQController : MonoBehaviour
 
         userScoreText = CreateText("UserScore", panelRect, 84, FontStyle.Bold, TextAnchor.MiddleCenter);
 
-        var header = CreateText("Header", panelRect, 74, FontStyle.Bold, TextAnchor.MiddleCenter);
-        header.text = "Top 10 Global Scores";
+        var header = CreateText("Header", panelRect, 55, FontStyle.Bold, TextAnchor.MiddleCenter);
+        header.text = "Top Color IQ's of all Time";
 
         for (int i = 0; i < 10; i++)
         {

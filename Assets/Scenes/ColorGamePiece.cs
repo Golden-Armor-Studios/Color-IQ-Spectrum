@@ -4,6 +4,7 @@ public class ColorGamePiece
 {
     private const string CircleSpritePath = "Circle";
     private const string Level2TilePath = "Sprites/level-2-tile";
+    private const float PixelsPerUnit = 100f;
 
     private readonly GameObject srGameObject;
 
@@ -23,7 +24,10 @@ public class ColorGamePiece
             Sprite sprite = Sprite.Create(
                 texture,
                 new Rect(0.0f, 0.0f, texture.width, texture.height),
-                new Vector2(0.5f, 0.5f)
+                new Vector2(0.5f, 0.5f),
+                PixelsPerUnit,
+                0,
+                SpriteMeshType.FullRect
             );
             sprite.name = "circle";
 
@@ -33,14 +37,19 @@ public class ColorGamePiece
             SpriteRenderer renderer = srGameObject.AddComponent<SpriteRenderer>();
             renderer.color = selectedColor;
             renderer.sprite = sprite;
-            renderer.drawMode = SpriteDrawMode.Sliced;
-            renderer.size = new Vector2(gamePieceSize, gamePieceSize);
+            renderer.drawMode = SpriteDrawMode.Simple;
 
             srGameObject.transform.position = position;
+            float baseWidth = renderer.sprite.bounds.size.x;
+            float baseHeight = renderer.sprite.bounds.size.y;
+            float scaleX = gamePieceSize / baseWidth;
+            float scaleY = gamePieceSize / baseHeight;
+            srGameObject.transform.localScale = new Vector3(scaleX, scaleY, 1f);
 
             CircleCollider2D collider = srGameObject.AddComponent<CircleCollider2D>();
             collider.isTrigger = false;
-            collider.radius = gamePieceRadius;
+            float maxScale = Mathf.Max(scaleX, scaleY);
+            collider.radius = (gamePieceSize * 0.5f) / maxScale;
         }
         else
         {
@@ -64,18 +73,25 @@ public class ColorGamePiece
             if (renderer != null)
             {
                 renderer.color = selectedColor;
-                renderer.drawMode = SpriteDrawMode.Sliced;
-                renderer.size = new Vector2(gamePieceSize, gamePieceSize);
+                renderer.drawMode = SpriteDrawMode.Simple;
                 renderer.sortingOrder = 1;
+
+                float baseWidth = renderer.sprite.bounds.size.x;
+                float baseHeight = renderer.sprite.bounds.size.y;
+                float scaleX = gamePieceSize / baseWidth;
+                float scaleY = gamePieceSize / baseHeight;
+                srGameObject.transform.localScale = new Vector3(scaleX, scaleY, 1f);
+
             }
 
-            CircleCollider2D collider = srGameObject.GetComponent<CircleCollider2D>();
-            if (collider == null)
+            CircleCollider2D colliderComponent = srGameObject.GetComponent<CircleCollider2D>();
+            if (colliderComponent == null)
             {
-                collider = srGameObject.AddComponent<CircleCollider2D>();
+                colliderComponent = srGameObject.AddComponent<CircleCollider2D>();
             }
-            collider.isTrigger = false;
-            collider.radius = gamePieceRadius;
+            colliderComponent.isTrigger = false;
+            float levelTileScale = Mathf.Max(srGameObject.transform.localScale.x, srGameObject.transform.localScale.y);
+            colliderComponent.radius = (gamePieceSize * 0.5f) / levelTileScale;
 
             Rigidbody2D rigidBody = srGameObject.GetComponent<Rigidbody2D>();
             if (rigidBody != null)
