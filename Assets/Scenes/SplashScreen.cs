@@ -15,6 +15,7 @@ public class SlashScreen : MonoBehaviour
     private void Start()
     {
         FB.FirebaseApp.InitializeAsync();
+        InAppPurchaseManager.InitializeStaticPurchasing();
 
         if (splashRenderer == null)
         {

@@ -40,12 +40,12 @@ public class InAppPurchaseManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-    void Start()
+    public static void InitializeStaticPurchasing()
     {
 #if UNITY_PURCHASING
-        if (!simulatePurchaseInEditor)
+        if (Instance != null)
         {
-            InitializePurchasing();
+            Instance.InitializePurchasing();
         }
 #endif
     }
