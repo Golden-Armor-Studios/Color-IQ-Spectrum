@@ -38,14 +38,10 @@ public class InAppPurchaseManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
-    }
-
-    public static void InitializeStaticPurchasing()
-    {
 #if UNITY_PURCHASING
-        if (Instance != null)
+        if (!simulatePurchaseInEditor)
         {
-            Instance.InitializePurchasing();
+            InitializePurchasing();
         }
 #endif
     }
@@ -143,4 +139,22 @@ public class InAppPurchaseManager : MonoBehaviour
         Debug.LogWarning($"[IAP] Purchase failed: {product.definition.id} - {failureReason}");
     }
 #endif
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    static void EnsureInstanceExists()
+    {
+        if (Instance != null)
+        {
+            return;
+        }
+
+        var existing = UnityEngine.Object.FindObjectOfType<InAppPurchaseManager>();
+        if (existing != null)
+        {
+            return;
+        }
+
+        var go = new GameObject("InAppPurchaseManager");
+        go.AddComponent<InAppPurchaseManager>();
+    }
 }
