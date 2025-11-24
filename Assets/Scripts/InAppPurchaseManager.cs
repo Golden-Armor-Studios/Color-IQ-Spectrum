@@ -13,9 +13,8 @@ public class InAppPurchaseManager : MonoBehaviour
     public static InAppPurchaseManager Instance { get; private set; }
 
     private const string RemoveAdsPrefKey = "ColorIQ_RemoveAds";
-    [Header("Product IDs")]
-    [SerializeField] string removeAdsProductId = "remove_ads";
-    [SerializeField] string appleStoreProductId = "6755665494";
+    const string removeAdsProductId = "remove_ads";
+    const string appleStoreProductId = "6755665494";
     [SerializeField] bool simulatePurchaseInEditor = false;
 #if UNITY_IOS || UNITY_EDITOR_OSX
     [SerializeField] string vipAchievementId = "ColorIQSpectrumVIP";
@@ -57,11 +56,11 @@ public class InAppPurchaseManager : MonoBehaviour
         }
 
         var builder = ConfigurationBuilder.Instance(StandardPurchasingModule.Instance());
-
-        var mappedIds = new IDs();
-        mappedIds.Add(removeAdsProductId, GooglePlay.Name);
-        mappedIds.Add(string.IsNullOrEmpty(appleStoreProductId) ? removeAdsProductId : appleStoreProductId, AppleAppStore.Name);
-
+        var mappedIds = new IDs
+        {
+            { removeAdsProductId, GooglePlay.Name },
+            { string.IsNullOrEmpty(appleStoreProductId) ? removeAdsProductId : appleStoreProductId, AppleAppStore.Name }
+        };
         builder.AddProduct(removeAdsProductId, ProductType.NonConsumable, mappedIds);
         UnityPurchasing.Initialize(this, builder);
     }
