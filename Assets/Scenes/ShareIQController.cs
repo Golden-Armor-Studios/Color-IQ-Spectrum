@@ -28,7 +28,6 @@ public class ShareIQController : MonoBehaviour
     private readonly List<GameObject> monetizationTargets = new List<GameObject>();
     [SerializeField] private GameObject removeAdsObject;
     [SerializeField] private string removeAdsObjectName = "RemoveAdsButton";
-    private Button removeAdsButton;
     private RectTransform leaderboardPanel;
 
     private async void Start()
@@ -216,15 +215,10 @@ public class ShareIQController : MonoBehaviour
             removeAdsObject.AddComponent<RemoveAdsPurchaseTrigger>();
         }
 
-        removeAdsButton = removeAdsObject.GetComponent<Button>();
-        if (removeAdsButton == null)
+        bool hasCollider = removeAdsObject.GetComponent<Collider>() != null || removeAdsObject.GetComponent<Collider2D>() != null;
+        if (!hasCollider)
         {
-            Debug.LogWarning("[ShareIQ] RemoveAdsButton is missing a Button component.");
-        }
-        else
-        {
-            removeAdsButton.onClick.RemoveListener(HandleRemoveAdsButton);
-            removeAdsButton.onClick.AddListener(HandleRemoveAdsButton);
+            Debug.LogWarning("[ShareIQ] RemoveAds sprite is missing a Collider; OnMouseUpAsButton taps will not fire.");
         }
 
         RegisterMonetizationObject(removeAdsObject);
