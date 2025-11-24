@@ -5,6 +5,9 @@ using Firebase.Auth;
 using Firebase.Analytics;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+#if UNITY_IOS || UNITY_EDITOR_OSX
+using Apple.GameKit;
+#endif
 
 namespace FB
 {
@@ -135,4 +138,75 @@ namespace FB
             FirebaseAnalytics.LogEvent("gamecenter_login");
         }
     }
+
+#if UNITY_IOS || UNITY_EDITOR_OSX
+    public static class Auth
+    {
+        static FirebaseAuth _firebaseAuth;
+        public static bool AuthCompleted { get; private set; }
+
+        public static async Task SignInWithGameCenterAsync(string conversionPrefKey)
+        {
+            AuthCompleted = false;
+            _firebaseAuth = await FirebaseApp.GetAuthAsync();
+            if (_firebaseAuth == null)
+            {
+                Debug.LogError("[GameCenterAuth] Firebase auth unavailable.");
+                AuthCompleted = true;
+                return;
+            }
+
+            if (Application.isEditor)
+            {
+                Debug.Log("[GameCenterAuth] Skipping Game Center → Firebase sign-in in editor.");
+                AuthCompleted = true;
+                return;
+            }
+
+            try
+            {
+                var localPlayer = await GKLocalPlayer.Authenticate();
+                if (localPlayer == null || !localPlayer.IsAuthenticated)
+                {
+                    Debug.LogWarning("[GameCenterAuth] Game Center authentication was cancelled or failed.");
+                    AuthCompleted = true;
+                    return;
+                }
+
+                if (!GameCenterAuthProvider.IsPlayerAuthenticated())
+                {
+                    Debug.LogWarning("[GameCenterAuth] Game Center provider does not see an authenticated player.");
+                    AuthCompleted = true;
+                    return;
+                }
+
+                var credential = await GameCenterAuthProvider.GetCredentialAsync();
+                if (credential == null)
+                {
+                    Debug.LogWarning("[GameCenterAuth] Failed to obtain Firebase credential from Game Center.");
+                    AuthCompleted = true;
+                    return;
+                }
+
+                var user = await _firebaseAuth.SignInWithCredentialAsync(credential);
+                Debug.Log($"[GameCenterAuth] Firebase signed in via Game Center as {user.DisplayName ?? user.UserId}.");
+
+                if (PlayerPrefs.GetInt(conversionPrefKey, 0) == 0)
+                {
+                    AnalyticsService.LogGameCenterConversion();
+                    PlayerPrefs.SetInt(conversionPrefKey, 1);
+                    PlayerPrefs.Save();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[GameCenterAuth] Failed to sign in with Game Center: {ex}");
+            }
+            finally
+            {
+                AuthCompleted = true;
+            }
+        }
+    }
+#endif
 }
