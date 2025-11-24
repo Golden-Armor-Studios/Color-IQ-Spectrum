@@ -20,7 +20,6 @@ public class ShareIQController : MonoBehaviour
 #endif
 
     private Text userScoreText;
-    private Text messageText;
     private readonly List<Text> leaderboardEntryTexts = new List<Text>(10);
     private bool uiBuilt;
     [Header("Monetization")]
@@ -54,7 +53,6 @@ public class ShareIQController : MonoBehaviour
         await UpdateGameCenterDataAsync();
 #else
         UpdateUserScoreUI(GetStoredScore(), null);
-        ShowMessage("Game Center leaderboard available on iOS builds.");
 #endif
     }
 
@@ -102,8 +100,6 @@ public class ShareIQController : MonoBehaviour
         layout.padding = new RectOffset(24, 24, 24, 24);
 
         userScoreText = CreateText("UserScore", panelRect, 84, FontStyle.Bold, TextAnchor.MiddleCenter);
-        messageText = CreateText("Message", panelRect, 37, FontStyle.Italic, TextAnchor.MiddleCenter);
-        messageText.color = new Color(0.85f, 0.85f, 0.85f, 1f);
 
         var header = CreateText("Header", panelRect, 74, FontStyle.Bold, TextAnchor.MiddleCenter);
         header.text = "Top 10 Global Scores";
@@ -243,14 +239,6 @@ public class ShareIQController : MonoBehaviour
             : $"Your Color IQ: {score}";
     }
 
-    private void ShowMessage(string text)
-    {
-        if (messageText != null)
-        {
-            messageText.text = text;
-        }
-    }
-
     private void UpdateLeaderboardUI(List<(long rank, string alias, long score)> entries)
     {
         for (int i = 0; i < leaderboardEntryTexts.Count; i++)
@@ -336,23 +324,18 @@ public class ShareIQController : MonoBehaviour
 
         if (Application.isEditor)
         {
-            ShowMessage("Leaderboard loads on device builds.");
             return;
         }
 
         var localPlayer = GKLocalPlayer.Local;
         if (localPlayer == null || !localPlayer.IsAuthenticated)
         {
-            ShowMessage("Sign into Game Center to view leaderboard.");
             return;
         }
-
-        ShowMessage("Syncing with Game Center…");
 
         GKLeaderboard leaderboard = await ResolveLeaderboardAsync();
         if (leaderboard == null)
         {
-            ShowMessage("Leaderboard not found. Check the ID in ShareIQController.");
             return;
         }
 
@@ -423,12 +406,10 @@ public class ShareIQController : MonoBehaviour
 
             UpdateUserScoreUI(localScore, rank);
             UpdateLeaderboardUI(entries);
-            ShowMessage(entries.Count > 0 ? string.Empty : "No leaderboard data yet.");
         }
         catch (System.Exception ex)
         {
             Debug.LogError($"[ShareIQ] Failed to load leaderboard entries: {ex}");
-            ShowMessage("Unable to load leaderboard entries.");
         }
     }
 
@@ -455,26 +436,22 @@ public class ShareIQController : MonoBehaviour
     {
         if (Application.isEditor)
         {
-            ShowMessage("Challenges run on device builds.");
             return;
         }
 
         var localPlayer = GKLocalPlayer.Local;
         if (localPlayer == null || !localPlayer.IsAuthenticated)
         {
-            ShowMessage("Sign into Game Center to challenge friends.");
             return;
         }
 
         try
         {
             await GKAccessPoint.Shared.TriggerForChallenges();
-            ShowMessage("Game Center challenge launched. Tell your friends: 'youcantbeatme'.");
         }
         catch (System.Exception ex)
         {
             Debug.LogError($"[ShareIQ] Challenge failed: {ex}");
-            ShowMessage("Failed to send challenge.");
         }
     }
 #endif
